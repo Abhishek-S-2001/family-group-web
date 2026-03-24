@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import { MoreHorizontal, Filter, Plus, Send, CheckCheck, UserPlus, Loader2, MessageSquare, Cloud, X } from 'lucide-react';
 import InviteMemberModal from '@/components/InviteMemberModal';
 import api from '@/lib/api';
-import SiloChatPanel from '@/components/SiloChatPanel';
+import SiloChatPanel from '@/components/chat/SiloChatPanel';
 
 export default function SiloDashboard() {
   const [activeTab, setActiveTab] = useState('Vault');
