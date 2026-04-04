@@ -10,6 +10,11 @@ export default function GlobalChatWrapper() {
   const { isChatOpen, setIsChatOpen, activeChatId, activeChatName, openChatWith } = useChat();
   const pathname = usePathname();
 
+  // Hide the global chat button on login and docs pages
+  if (pathname === '/login' || pathname === '/docs') {
+    return null;
+  }
+
   const renderChatContent = () => {
     // 1. Active DM or selected chat from inbox
     if (activeChatId) {

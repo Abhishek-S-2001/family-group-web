@@ -5,6 +5,7 @@ import "./globals.css";
 // Import your new Providers wrapper and Chat Panel
 import Providers from '@/components/Providers';
 import GlobalChatWrapper from '@/components/chat/GlobalChatWrapper';
+import TermsGuard from '@/components/TermsGuard';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,8 +34,10 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <Providers>
-          {/* Your page content */}
-          {children} 
+          {/* Your page content wrapped in the T&C guard */}
+          <TermsGuard>
+            {children} 
+          </TermsGuard>
           
           {/* Your floating chat panel, now safely inside the Provider! */}
           <GlobalChatWrapper /> 

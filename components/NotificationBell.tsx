@@ -12,6 +12,7 @@ interface Notification {
   created_at: string;
   actor_name?: string;
   silo_name?: string;
+  silo_id?: string;
 }
 
 export default function NotificationBell() {
@@ -68,6 +69,31 @@ export default function NotificationBell() {
     }
   };
 
+  // 5. Handle Silo Invites
+  const handleAcceptInvite = async (n: Notification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!n.silo_id) return;
+    try {
+      await api.post(`/silos/${n.silo_id}/accept-invite`, { notification_id: n.id });
+      setNotifications(prev => prev.filter(notif => notif.id !== n.id));
+      setUnreadCount(prev => Math.max(0, prev - (n.is_read ? 0 : 1)));
+    } catch (error) {
+      console.error("Failed to accept invite:", error);
+    }
+  };
+
+  const handleDeclineInvite = async (n: Notification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!n.silo_id) return;
+    try {
+      await api.post(`/silos/${n.silo_id}/decline-invite`, { notification_id: n.id });
+      setNotifications(prev => prev.filter(notif => notif.id !== n.id));
+      setUnreadCount(prev => Math.max(0, prev - (n.is_read ? 0 : 1)));
+    } catch (error) {
+      console.error("Failed to decline invite:", error);
+    }
+  };
+
   // Helper to generate text based on notification type
   const getNotificationText = (n: Notification) => {
     const actor = n.actor_name || "Someone";
@@ -78,6 +104,7 @@ export default function NotificationBell() {
       case 'comment': return <span><strong>{actor}</strong> commented on your post{silo}.</span>;
       case 'join_request': return <span><strong>{actor}</strong> wants to join{silo}.</span>;
       case 'new_post': return <span><strong>{actor}</strong> added a new memory{silo}.</span>;
+      case 'silo_invite': return <span><strong>@{actor}</strong> invited you to join <strong>{n.silo_name || "a Silo"}</strong>.</span>;
       default: return <span>You have a new notification from {actor}.</span>;
     }
   };
@@ -129,6 +156,22 @@ export default function NotificationBell() {
                 >
                   <div className="flex-1 text-sm">
                     {getNotificationText(n)}
+                    {n.type === 'silo_invite' && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <button 
+                          onClick={(e) => handleAcceptInvite(n, e)}
+                          className="bg-[#0434c6] text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 transition"
+                        >
+                          Accept
+                        </button>
+                        <button 
+                          onClick={(e) => handleDeclineInvite(n, e)}
+                          className="border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-gray-50 transition"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    )}
                     <div className="text-xs text-gray-400 mt-1">
                       {new Date(n.created_at).toLocaleDateString()}
                     </div>
