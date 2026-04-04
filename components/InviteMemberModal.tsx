@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Mail, ArrowRight, UserPlus, Search, User as UserIcon, CheckCircle2 } from 'lucide-react';
-import api from '../lib/api';
+import { useState, useEffect } from 'react';
+import { X, Mail, ArrowRight, Search, User as UserIcon, CheckCircle2, Send, Loader2 } from 'lucide-react';
+import api from '../lib/axios';
+import ViewProfileModal from './ViewProfileModal';
 
 interface InviteMemberModalProps {
   isOpen: boolean;
@@ -23,44 +24,62 @@ export default function InviteMemberModal({ isOpen, onClose, siloId }: InviteMem
   // Search States
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Profile Preview State
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
 
   // Email States
   const [email, setEmail] = useState('');
 
-  if (!isOpen) return null;
+  // --- REAL-TIME DEBOUNCED SEARCH (same pattern as ChatInbox) ---
+  // ⚠️ Must be ABOVE the early return to satisfy Rules of Hooks
+  useEffect(() => {
+    if (!isOpen || !searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      setHasSearched(false);
+      return;
+    }
 
-  // --- MOCK SEARCH FUNCTION ---
-  // In production, this will be: await api.get(`/users/search?q=${searchQuery}`)
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery) return;
-    
-    setIsLoading(true);
-    setHasSearched(false);
-    
-    // Simulating network delay
-    setTimeout(() => {
-      if (searchQuery.toLowerCase() === 'sarah') {
-        setSearchResults([{ id: '1', username: 'sarah_miller', avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAPC02bRhHoKYAH6AoHrZ5wxnYhizRfWwqctiuEPuCp4sJr2txeUlpDwinLyA-Isi9ccdwZw4JeadZcT2jxGeRb4ChsC4keG96PRZ9xNC8Men0J0oGC7qVuUDzXyfQvhR2WdW1a58UfhkSsFRT-FQm4tRHw5GOVh8J7ZHfbZ7nrlVr9ArS2V6QuOzfnshWQyOZ2QSGqzpm7qoZJ-4Du7zL4pjpVwAI2ba5DeTvoVs1JjdrSLgkLEAlt1y-joCdo9v-wMJv6dpOh4J8m' }]);
-      } else {
-        setSearchResults([]); // No users found
+    setIsSearching(true);
+
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await api.get(`/users/search?q=${encodeURIComponent(searchQuery)}`);
+        const users = response.data.users || [];
+        setSearchResults(
+          users.map((u: any) => ({
+            id: u.id,
+            username: u.username,
+            avatar: u.avatar_url,
+          }))
+        );
+      } catch (err) {
+        console.error('Search failed:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+        setHasSearched(true);
       }
-      setHasSearched(true);
-      setIsLoading(false);
-    }, 800);
-  };
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery, isOpen]);
+
+  if (!isOpen) return null;
 
   // --- IN-APP DIRECT INVITE ---
   const handleDirectInvite = async (userId: string) => {
     setIsLoading(true);
+    setError('');
     try {
-      // Production: await api.post(`/silos/${siloId}/members`, { user_id: userId })
-      await new Promise(resolve => setTimeout(resolve, 800)); // Mock delay
+      await api.post(`/silos/${siloId}/invite`, { user_id: userId });
       setSuccess(true);
       setTimeout(() => resetAndClose(), 2000);
-    } catch (err) {
-      setError('Failed to send invite');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to send invite. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -86,22 +105,24 @@ export default function InviteMemberModal({ isOpen, onClose, siloId }: InviteMem
     setSearchQuery('');
     setSearchResults([]);
     setHasSearched(false);
+    setIsSearching(false);
     setMode('search');
     setEmail('');
     onClose();
   };
 
   return (
-    <div 
+    <>
+    <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#191c1e]/30 backdrop-blur-md transition-all"
       onClick={resetAndClose}
     >
-      <div 
+      <div
         className="w-full max-w-[440px] bg-white p-10 rounded-[3rem] shadow-[0_40px_80px_rgba(25,28,30,0.15)] relative border-none flex flex-col transition-all duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
-        <button 
+        <button
           onClick={resetAndClose}
           className="absolute top-6 right-6 w-10 h-10 bg-[#f2f4f6] text-[#777587] rounded-full flex items-center justify-center hover:bg-[#e0e3e5] hover:text-[#191c1e] transition-colors"
         >
@@ -117,8 +138,8 @@ export default function InviteMemberModal({ isOpen, onClose, siloId }: InviteMem
             {mode === 'search' ? 'Find Family' : 'Invite via Email'}
           </h2>
           <p className="text-[#464555] font-medium text-sm leading-relaxed" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-            {mode === 'search' 
-              ? 'Search for a username to add them directly to your vault.' 
+            {mode === 'search'
+              ? 'Search for a username to add them directly to your vault.'
               : 'Send a secure magic link to invite them to this Silo.'}
           </p>
         </div>
@@ -137,42 +158,52 @@ export default function InviteMemberModal({ isOpen, onClose, siloId }: InviteMem
             {/* --------------------------- */}
             {mode === 'search' && (
               <div className="flex flex-col gap-4">
-                <form onSubmit={handleSearch} className="relative group">
+                {/* Real-time search input — no submit button */}
+                <div className="relative">
                   <input
+                    autoFocus
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-5 py-4 pl-12 pr-24 bg-[#f2f4f6] border-none rounded-2xl focus:ring-2 focus:ring-[#0434c6]/20 focus:bg-[#f7f9fb] transition-all text-[#191c1e] outline-none font-medium placeholder-[#777587]"
+                    onChange={(e) => { setSearchQuery(e.target.value); setError(''); }}
+                    className="w-full px-5 py-4 pl-12 pr-10 bg-[#f2f4f6] border-none rounded-2xl focus:ring-2 focus:ring-[#0434c6]/20 focus:bg-[#f7f9fb] transition-all text-[#191c1e] outline-none font-medium placeholder-[#777587]"
                     placeholder="e.g. sarah_miller"
                   />
                   <Search size={20} className="absolute left-4 top-4 text-[#777587]" />
-                  <button 
-                    type="submit"
-                    disabled={!searchQuery || isLoading}
-                    className="absolute right-2 top-2 bottom-2 px-4 bg-white text-[#0434c6] font-bold text-sm rounded-xl shadow-sm hover:shadow-md transition-all disabled:opacity-50"
-                  >
-                    {isLoading ? '...' : 'Search'}
-                  </button>
-                </form>
+                  {isSearching && (
+                    <Loader2 size={18} className="absolute right-4 top-4 text-[#0434c6] animate-spin" />
+                  )}
+                </div>
+
+                {/* Error Banner */}
+                {error && (
+                  <div className="text-[#93000a] text-sm text-center bg-[#ffdad6] p-3 rounded-xl font-bold">
+                    {error}
+                  </div>
+                )}
 
                 {/* Search Results Area */}
                 {hasSearched && (
-                  <div className="mt-2 flex flex-col gap-3">
+                  <div className="flex flex-col gap-3">
                     {searchResults.length > 0 ? (
-                      // Found Users
                       searchResults.map((user) => (
                         <div key={user.id} className="flex items-center justify-between p-3 pr-4 bg-[#f7f9fb] rounded-2xl border border-[#e0e3e5]/50">
-                          <div className="flex items-center gap-3">
+                          {/* Clickable avatar + name opens profile */}
+                          <button
+                            onClick={() => setViewingUserId(user.id)}
+                            className="flex items-center gap-3 text-left hover:opacity-75 transition-opacity"
+                          >
                             <div className="w-10 h-10 rounded-full bg-[#e0e3e5] overflow-hidden flex-shrink-0">
                               {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="avatar" /> : <UserIcon className="m-2 text-[#777587]" />}
                             </div>
                             <span className="font-extrabold text-[#191c1e] text-sm" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>@{user.username}</span>
-                          </div>
-                          <button 
+                          </button>
+                          <button
                             onClick={() => handleDirectInvite(user.id)}
-                            className="bg-[#0434c6] text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-[#3050de] transition-colors"
+                            disabled={isLoading}
+                            className="flex items-center gap-1.5 bg-[#0434c6] text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-[#3050de] transition-colors disabled:opacity-50"
                           >
-                            Add
+                            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            Invite
                           </button>
                         </div>
                       ))
@@ -180,7 +211,7 @@ export default function InviteMemberModal({ isOpen, onClose, siloId }: InviteMem
                       // No Users Found -> Fallback UI
                       <div className="flex flex-col items-center justify-center p-6 bg-[#f7f9fb] rounded-2xl text-center gap-3 border border-[#e0e3e5]/50">
                         <span className="text-sm font-bold text-[#464555]">No user found matching "{searchQuery}"</span>
-                        <button 
+                        <button
                           onClick={() => { setMode('email'); setEmail(searchQuery.includes('@') ? searchQuery : ''); }}
                           className="flex items-center gap-2 text-[#0434c6] font-bold text-sm hover:underline"
                         >
@@ -244,5 +275,13 @@ export default function InviteMemberModal({ isOpen, onClose, siloId }: InviteMem
         )}
       </div>
     </div>
+
+    {/* Profile Preview — rendered on top of InviteMemberModal */}
+    <ViewProfileModal
+      userId={viewingUserId}
+      isOpen={!!viewingUserId}
+      onClose={() => setViewingUserId(null)}
+    />
+    </>
   );
 }
